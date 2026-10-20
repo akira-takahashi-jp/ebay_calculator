@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>eBay利益計算</title>
+<meta name="description" content="eBay販売の配送方法別利益を計算するオフライン対応アプリ">
+<meta name="theme-color" content="#0f766e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="eBay利益計算">
+<style>
+:root {
+  --bg: #f4f6f8; --surface: #fff; --surface-2: #f8fafb; --text: #17212b; --muted: #5f6b76; --line: #dfe4e8;
+  --accent: #0f766e; --accent-soft: #e2f3f1; --pos: #0b7a3e; --neg: #c62828; --warn: #a15c00; --input: #fffbe6;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #1a2128; --surface-2: #151b21; --text: #e6ebef; --muted: #98a4ae; --line: #2c353e;
+    --accent: #2dd4bf; --accent-soft: #123a37; --pos: #4ade80; --neg: #f87171; --warn: #fbbf24; --input: #22272b;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #1a2128; --surface-2: #151b21; --text: #e6ebef; --muted: #98a4ae; --line: #2c353e;
+  --accent: #2dd4bf; --accent-soft: #123a37; --pos: #4ade80; --neg: #f87171; --warn: #fbbf24; --input: #22272b;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  -webkit-text-size-adjust: 100%;
+}
+header {
+  position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; align-items: center; gap: 12px;
+}
+header h1 { font-size: 17px; margin: 0; flex: 1; }
+header .fx { font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+main { max-width: 980px; margin: 0 auto; padding: 16px; }
+nav.tabs {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; display: flex; background: var(--surface);
+  border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
+}
+nav.tabs button {
+  flex: 1; border: 0; background: none; color: var(--muted); padding: 10px 0 12px; font: inherit; font-size: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
+}
+nav.tabs button svg { width: 22px; height: 22px; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); font-weight: 600; }
+.view[hidden] { display: none; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; }
+.card h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 720px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+label.field input, label.field select {
+  font: inherit; font-size: 16px; color: var(--text); background: var(--input); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0; font-variant-numeric: tabular-nums;
+}
+label.field input:focus, label.field select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.hint.warn { color: var(--warn); }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+button.btn {
+  font: inherit; font-size: 14px; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
+}
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] button.btn.primary { color: #062a27; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.btn.primary { color: #062a27; } }
+button.btn:disabled { opacity: .5; cursor: default; }
+
+.group-title { font-size: 13px; font-weight: 600; color: var(--muted); margin: 20px 0 8px; }
+.group-title:first-child { margin-top: 0; }
+.methods { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+@media (max-width: 400px) { main { padding: 12px; } .card { padding: 12px; } .method .profit { font-size: 19px; } }
+.method { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; position: relative; }
+.method.best { border-color: var(--accent); background: var(--accent-soft); }
+.method .name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.method .badge { position: absolute; top: 8px; right: 8px; font-size: 10px; background: var(--accent); color: var(--surface); border-radius: 999px; padding: 1px 7px; font-weight: 600; }
+.method .profit { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.method .msg { font-size: 14px; font-weight: 600; color: var(--warn); line-height: 1.25; padding: 4px 0; }
+.method dl { margin: 6px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 0 8px; font-size: 12px; color: var(--muted); }
+.method dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.method .note { font-size: 10px; color: var(--muted); margin-top: 4px; }
+.pos { color: var(--pos); } .neg { color: var(--neg); }
+
+details.detail summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--muted); }
+table.kv { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+table.kv td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+table.kv td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+table.kv tr.sub td { color: var(--muted); font-weight: 600; padding-top: 14px; }
+
+.settings-section { margin-bottom: 16px; }
+.settings-section summary { font-weight: 600; cursor: pointer; padding: 4px 0; }
+.settings-section[open] summary { margin-bottom: 12px; }
+.setting { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 4px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.setting:first-of-type { border-top: 0; }
+.setting .lbl { font-size: 14px; }
+.setting .note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.setting input, .setting select {
+  font: inherit; font-size: 16px; color: var(--text); background: var(--input); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 8px; width: 100%; text-align: right; font-variant-numeric: tabular-nums;
+}
+.setting select { text-align: left; }
+.setting .unit-wrap { display: flex; align-items: center; gap: 4px; }
+.setting .unit { font-size: 12px; color: var(--muted); min-width: 1.5em; }
+.setting.changed .lbl::after { content: "変更済"; font-size: 10px; margin-left: 6px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; vertical-align: 2px; }
+.usage dt { font-weight: 600; margin-top: 12px; }
+.usage dd { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; max-width: calc(100% - 32px); }
+.toast.show { opacity: .95; }
+</style>
+</head>
+<body>
+<header>
+  <h1>eBay利益計算</h1>
+  <div class="fx" id="fxInfo"></div>
+</header>
+
+<main>
+  <section class="view" id="view-calc">
+    <div class="card">
+      <h2>入力</h2>
+      <div class="grid">
+        <label class="field">eBay販売価格（USD）<input id="in-price" type="number" inputmode="decimal" step="any" min="0"></label>
+        <label class="field">仕入価格（税込・円）<input id="in-cost" type="number" inputmode="numeric" step="any" min="0"></label>
+        <label class="field">実重量（g）<input id="in-weight" type="number" inputmode="numeric" step="any" min="0"></label>
+        <label class="field">カテゴリNo<input id="in-category" type="text" inputmode="numeric" autocomplete="off"></label>
+        <label class="field">長さ（cm・最長辺）<input id="in-length" type="number" inputmode="decimal" step="any" min="0"></label>
+        <label class="field">幅（cm）<input id="in-width" type="number" inputmode="decimal" step="any" min="0"></label>
+        <label class="field">高さ（cm）<input id="in-height" type="number" inputmode="decimal" step="any" min="0"></label>
+        <label class="field">購入者送料（USD）<input id="in-buyerShip" type="number" inputmode="decimal" step="any" min="0"></label>
+      </div>
+      <div class="hint" id="catHint"></div>
+      <div class="hint" id="weightHint"></div>
+      <div class="row-actions">
+        <button class="btn" id="clearInputs" type="button">入力をクリア</button>
+      </div>
+    </div>
+
+    <div class="card" id="results"></div>
+
+    <div class="card">
+      <details class="detail" id="detailBox">
+        <summary>計算の内訳</summary>
+        <table class="kv" id="detailTable"></table>
+      </details>
+    </div>
+  </section>
+
+  <section class="view" id="view-settings" hidden>
+    <div class="card">
+      <h2>為替</h2>
+      <div class="hint" id="fxStatus"></div>
+      <div class="row-actions">
+        <button class="btn primary" id="fetchFx" type="button">最新レートを取得</button>
+      </div>
+    </div>
+    <div id="settingsForm"></div>
+    <div class="card">
+      <h2>設定の管理</h2>
+      <div class="hint">設定はこの端末のブラウザ（localStorage）にのみ保存されます。別の端末へ移すときは書き出し／読み込みを使ってください。</div>
+      <div class="row-actions">
+        <button class="btn" id="exportSettings" type="button">設定を書き出す</button>
+        <button class="btn" id="importSettings" type="button">設定を読み込む</button>
+        <button class="btn" id="resetSettings" type="button">初期値に戻す</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-usage" hidden>
+    <div class="card usage">
+      <h2>使い方</h2>
+      <dl>
+        <dt>通常の入力</dt><dd>販売価格（USD）、仕入価格（税込・円）、実重量（g）を入力。カテゴリNoは必要なときだけ変更します。入力内容は自動で保存されます。</dd>
+        <dt>購入者負担送料</dt><dd>販売価格とは別に受け取る送料は「購入者送料（USD）」へ。送料無料なら0。</dd>
+        <dt>梱包サイズ</dt><dd>エコノミー・FedEx・DHLの計算には長さ・幅・高さ（cm）が必要です。長さは最長辺。</dd>
+        <dt>US Zonos</dt><dd>送料はエアパケットUSの日本郵便送料。利益は関税・Zonos費用を控除した金額。「関税対象外」はCD／DVD／Blu-ray／レコード／書籍／漫画／雑誌／ポスター等の参考欄で、適用条件の判定は行いません。</dd>
+        <dt>EU Zonos／Economy</dt><dd>EU Zonos＝EUエアパケ利益－固定手数料（818円）－3ユーロ×EUR/JPY。EU Economy・FedEx・DHLは設定の「EU配送先」に連動します。</dd>
+        <dt>EU FedEx／DHL</dt><dd>送料は設定で上書き可能（空欄で自動）。</dd>
+        <dt>還付込み</dt><dd>利益＋税込仕入価格÷1.1×10%。実際の還付可否の判定は行いません。</dd>
+        <dt>料率の変更</dt><dd>「設定」タブで海外決済手数料、Payoneer、広告、追加3%、切手割引、関税、MPF、Zonos、各社サーチャージ等を変更できます。設定はこの端末に保存されます。</dd>
+        <dt>為替</dt><dd>「設定」で最新レート（ECB参考値）を取得するか、手入力します。「起動時に自動取得」をOnにすると開くたびに更新します。オフライン時は保存済みの値を使います。</dd>
+        <dt>カテゴリー</dt><dd>カテゴリー手数料一覧・価格別料率を収録。未登録Noは「カテゴリ未登録」と表示します。</dd>
+        <dt>送料表</dt><dd>EconomyはeBay用2026-07-30版、FedEx FICP・DHL荷物用は2026-10-01版のUS/EU基本送料を使用。</dd>
+        <dt>サーチャージ</dt><dd>燃油率は手動入力（Economy・FedEx・DHL）。FedExは2026-10-05～11公表値51.25%、DHLは参考値39.75%（25%割引適用）。</dd>
+        <dt>計算方式</dt><dd>EMS・印刷物書留・書状書留はPayoneerを後掛け。他の配送は料率加算方式。</dd>
+        <dt>Economyの容積重量</dt><dd>基本料金ページに従いcm³÷8,000 kg。資料の別注記には÷6,000もあるため、出荷前に契約条件をご確認ください。</dd>
+        <dt>関税</dt><dd>US関税率は設定で変更。関税額を指定する場合はEconomy・FedEx・DHLの各上書き欄へ（空欄で仕入価格×関税率、0も有効）。EUは555円×分類数。実額は上書き欄へ。</dd>
+        <dt>EU上限</dt><dd>EU Economyは申告額150 EUR以下。20kg超は掲載送料表の上限超過。EU FedEx/DHLで150 EUR超は「EU関税額上書き」を入力。</dd>
+        <dt>季節割増</dt><dd>FedEx：EU H/M混雑割増は11/1まで50%割引、非標準貨物割増は3/31まで100%割引（日付で自動判定）。USゾーンは郵便番号入力時に自動判定。</dd>
+        <dt>送料表示</dt><dd>送料表示は燃油・通常割増込み（Economyは関税・通関費込み）。FedEx・DHLの関税・通関費は利益から別途控除。</dd>
+        <dt>確定請求</dt><dd>各費用は円単位へ四捨五入した見積額です。最終利益は配送会社の確定請求額に合わせて関税・追加費用・送料を上書きしてください。</dd>
+      </dl>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-view="calc" aria-selected="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/></svg>計算</button>
+  <button role="tab" data-view="settings" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>設定</button>
+  <button role="tab" data-view="usage" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5h0"/></svg>使い方</button>
+</nav>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="data.js"></script>
+<script src="calc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
